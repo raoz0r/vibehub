@@ -27,7 +27,10 @@ void main() {
       tempDir = Directory.systemTemp.createTempSync('repositories_bloc_test');
       testDbPath = p.join(tempDir.path, 'database');
       testLockFilePath = p.join(tempDir.path, 'locked_skills.json');
-      testRegistryFilePath = p.join(tempDir.path, 'registered_repositories.json');
+      testRegistryFilePath = p.join(
+        tempDir.path,
+        'registered_repositories.json',
+      );
       testRepoPath = p.join(tempDir.path, 'my_test_repo');
 
       // Create dummy repo directory
@@ -36,7 +39,9 @@ void main() {
       database = VibeHubDatabase(databasePath: testDbPath);
       skillsApi = SkillsApi(database);
       skillsLockApi = SkillsLockApi(lockFilePath: testLockFilePath);
-      repositoriesRegistryApi = RepositoriesRegistryApi(registryFilePath: testRegistryFilePath);
+      repositoriesRegistryApi = RepositoriesRegistryApi(
+        registryFilePath: testRegistryFilePath,
+      );
 
       repositoriesBloc = RepositoriesBloc(
         skillsApi: skillsApi,
@@ -113,6 +118,12 @@ void main() {
           installCommand: 'cmd',
           updateAvailable: false,
           inJsonProjects: '{}',
+          metadata: {
+            'computedHash': 'abc123',
+            'source': 'owner/repo',
+            'sourceType': 'github',
+            'skillPath': 'skills/accessibility-review/SKILL.md',
+          },
         );
         skillsApi.writeSkill(skill);
 
@@ -159,6 +170,21 @@ void main() {
         final link = Link(linkPath);
         expect(await link.exists(), isTrue);
 
+        final skillsLockFile = File(
+          p.join(testRepoPath, '.agents', 'skills-lock.json'),
+        );
+        expect(await skillsLockFile.exists(), isTrue);
+        final skillsLockJson =
+            json.decode(await skillsLockFile.readAsString())
+                as Map<String, dynamic>;
+        expect(skillsLockJson['version'], 1);
+        expect(skillsLockJson['skills']['accessibility-review'], {
+          'source': 'owner/repo',
+          'sourceType': 'github',
+          'skillPath': 'skills/accessibility-review/SKILL.md',
+          'computedHash': 'abc123',
+        });
+
         // Verify DB contains project_skills association
         final updatedSkill = skillsApi.readSkill(
           'accessibility-review@2026.28',
@@ -180,6 +206,7 @@ void main() {
           installCommand: 'install accessibility-review',
           updateAvailable: false,
           inJsonProjects: '{}',
+          metadata: {'sha': 'def456'},
         );
 
         repositoriesBloc.add(const RepositoriesStarted());
@@ -222,6 +249,18 @@ void main() {
         );
         expect(await Link(linkPath).exists(), isTrue);
 
+        final skillsLockJson =
+            json.decode(
+                  await File(
+                    p.join(testRepoPath, '.agents', 'skills-lock.json'),
+                  ).readAsString(),
+                )
+                as Map<String, dynamic>;
+        expect(
+          skillsLockJson['skills']['accessibility-review']['computedHash'],
+          'def456',
+        );
+
         final installedSkill = skillsApi.readSkill(
           'accessibility-review@2026.28',
         );
@@ -260,6 +299,21 @@ void main() {
         await Link(
           linkPath,
         ).create(testRepoPath); // Target doesn't matter for deletion test
+        await File(
+          p.join(testRepoPath, '.agents', 'skills-lock.json'),
+        ).writeAsString(
+          json.encode({
+            'version': 1,
+            'skills': {
+              'accessibility-review': {
+                'source': 'owner/repo',
+                'sourceType': 'github',
+                'skillPath': 'skills/accessibility-review/SKILL.md',
+                'computedHash': 'abc123',
+              },
+            },
+          }),
+        );
 
         repositoriesBloc.add(const RepositoriesStarted());
         await repositoriesBloc.stream.firstWhere((state) => !state.isLoading);
@@ -291,6 +345,12 @@ void main() {
 
         // Verify the symlink and parent directories are deleted
         expect(await Link(linkPath).exists(), isFalse);
+        expect(
+          await File(
+            p.join(testRepoPath, '.agents', 'skills-lock.json'),
+          ).exists(),
+          isFalse,
+        );
         expect(
           await Directory(p.join(testRepoPath, '.agents')).exists(),
           isFalse,
@@ -354,6 +414,27 @@ void main() {
         await Directory(p.dirname(link1Path)).create(recursive: true);
         await Link(link1Path).create(testRepoPath);
         await Link(link2Path).create(testRepoPath);
+        await File(
+          p.join(testRepoPath, '.agents', 'skills-lock.json'),
+        ).writeAsString(
+          json.encode({
+            'version': 1,
+            'skills': {
+              'accessibility-review': {
+                'source': 'owner/repo',
+                'sourceType': 'github',
+                'skillPath': 'skills/accessibility-review/SKILL.md',
+                'computedHash': 'abc123',
+              },
+              'flutter-add-widget-test': {
+                'source': 'owner/repo2',
+                'sourceType': 'github',
+                'skillPath': 'skills/flutter-add-widget-test/SKILL.md',
+                'computedHash': 'def456',
+              },
+            },
+          }),
+        );
 
         repositoriesBloc.add(const RepositoriesStarted());
         await repositoriesBloc.stream.firstWhere((state) => !state.isLoading);
@@ -385,6 +466,12 @@ void main() {
         // Verify symlinks and parent directories are deleted
         expect(await Link(link1Path).exists(), isFalse);
         expect(await Link(link2Path).exists(), isFalse);
+        expect(
+          await File(
+            p.join(testRepoPath, '.agents', 'skills-lock.json'),
+          ).exists(),
+          isFalse,
+        );
         expect(
           await Directory(p.join(testRepoPath, '.agents')).exists(),
           isFalse,
@@ -476,27 +563,41 @@ void main() {
       repositoriesBloc.add(const RepositoriesStarted());
       await repositoriesBloc.stream.firstWhere((state) => !state.isLoading);
 
-      repositoriesBloc.add(const RepositoriesSearchQueryChanged('hello-sandbox'));
+      repositoriesBloc.add(
+        const RepositoriesSearchQueryChanged('hello-sandbox'),
+      );
 
       await expectLater(
         repositoriesBloc.stream,
-        emits(predicate<RepositoriesState>((state) => state.searchQuery == 'hello-sandbox')),
+        emits(
+          predicate<RepositoriesState>(
+            (state) => state.searchQuery == 'hello-sandbox',
+          ),
+        ),
       );
     });
 
-    test('RepositoryRegisterRequested registers new repository path persistently', () async {
-      repositoriesBloc.add(const RepositoriesStarted());
-      await repositoriesBloc.stream.firstWhere((state) => !state.isLoading);
+    test(
+      'RepositoryRegisterRequested registers new repository path persistently',
+      () async {
+        repositoriesBloc.add(const RepositoriesStarted());
+        await repositoriesBloc.stream.firstWhere((state) => !state.isLoading);
 
-      repositoriesBloc.add(RepositoryRegisterRequested(
-        path: testRepoPath,
-        name: 'My New Sandbox',
-      ));
+        repositoriesBloc.add(
+          RepositoryRegisterRequested(
+            path: testRepoPath,
+            name: 'My New Sandbox',
+          ),
+        );
 
-      await expectLater(
-        repositoriesBloc.stream,
-        emitsInOrder([
-          predicate<RepositoriesState>((state) => state.isLoading && state.actionStatus == 'Registering repository...'),
+        await expectLater(
+          repositoriesBloc.stream,
+          emitsInOrder([
+            predicate<RepositoriesState>(
+              (state) =>
+                  state.isLoading &&
+                  state.actionStatus == 'Registering repository...',
+            ),
             predicate<RepositoriesState>((state) {
               if (state.isLoading) return false;
               if (state.repositories.length != 1) return false;
@@ -505,14 +606,16 @@ void main() {
                   entry.path == testRepoPath.replaceAll('\\', '/') &&
                   state.actionStatus == 'Successfully registered repository.';
             }),
-        ]),
-      );
+          ]),
+        );
 
-      // Verify it's persisted in the JSON registry file
-      final registered = await repositoriesRegistryApi.getRegisteredRepositories();
-      expect(registered, hasLength(1));
-      expect(registered.first['name'], 'My New Sandbox');
-      expect(registered.first['path'], testRepoPath.replaceAll('\\', '/'));
-    });
+        // Verify it's persisted in the JSON registry file
+        final registered = await repositoriesRegistryApi
+            .getRegisteredRepositories();
+        expect(registered, hasLength(1));
+        expect(registered.first['name'], 'My New Sandbox');
+        expect(registered.first['path'], testRepoPath.replaceAll('\\', '/'));
+      },
+    );
   });
 }

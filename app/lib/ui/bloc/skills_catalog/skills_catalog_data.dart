@@ -182,7 +182,13 @@ Skill skillFromFeedItem(SkillFeedItem item) {
     installCommand: item.installCommand,
     updateAvailable: false,
     inJsonProjects: '{}',
-    metadata: item.metadata,
+    metadata: {
+      ...item.metadata,
+      'sha': item.sha,
+      'source': item.metadata['source'] ?? '${item.owner}/${item.repo}',
+      'sourceType': item.metadata['sourceType'] ?? 'github',
+      'skillPath': item.metadata['skillPath'] ?? 'skills/${item.name}/SKILL.md',
+    },
   );
 }
 

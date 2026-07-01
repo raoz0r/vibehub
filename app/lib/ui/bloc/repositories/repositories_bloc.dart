@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 import 'package:vibehub/api/paths.dart';
@@ -47,14 +48,7 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
       throw StateError('Skill $skillId is not installed/found in database.');
     }
 
-    final separator = skill.id.lastIndexOf('@');
-    final skillName = separator > 0
-        ? skill.id.substring(0, separator)
-        : skill.id;
-    final nameSeparator = skillName.lastIndexOf('/');
-    final skillShortName = nameSeparator >= 0
-        ? skillName.substring(nameSeparator + 1)
-        : skillName;
+    final skillShortName = _skillShortName(skill);
 
     final linkPath = p.join(
       repositoryPath,
@@ -97,6 +91,11 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
     }
     await Directory(p.dirname(linkPath)).create(recursive: true);
     await link.create(targetPath);
+    await _writeRepositorySkillLockEntry(
+      repositoryPath: repositoryPath,
+      skill: skill,
+      targetPath: targetPath,
+    );
   }
 
   Future<void> _onStarted(
@@ -309,14 +308,7 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
     try {
       final skill = _skillsApi.readSkill(event.skillId);
       if (skill != null) {
-        final separator = skill.id.lastIndexOf('@');
-        final skillName = separator > 0
-            ? skill.id.substring(0, separator)
-            : skill.id;
-        final nameSeparator = skillName.lastIndexOf('/');
-        final skillShortName = nameSeparator >= 0
-            ? skillName.substring(nameSeparator + 1)
-            : skillName;
+        final skillShortName = _skillShortName(skill);
 
         final linkPath = p.join(
           event.repositoryPath,
@@ -346,6 +338,10 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
         if (await link.exists()) {
           await link.delete();
         }
+        await _removeRepositorySkillLockEntry(
+          repositoryPath: event.repositoryPath,
+          skill: skill,
+        );
 
         // Clean up empty parent directories
         final skillsDir = Directory(
@@ -431,14 +427,7 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
           _skillsApi.writeSkill(updatedSkill);
 
           // Delete corresponding symlink
-          final separator = skill.id.lastIndexOf('@');
-          final skillName = separator > 0
-              ? skill.id.substring(0, separator)
-              : skill.id;
-          final nameSeparator = skillName.lastIndexOf('/');
-          final skillShortName = nameSeparator >= 0
-              ? skillName.substring(nameSeparator + 1)
-              : skillName;
+          final skillShortName = _skillShortName(skill);
 
           final linkPath = p.join(
             event.repositoryPath,
@@ -450,6 +439,10 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
           if (await link.exists()) {
             await link.delete();
           }
+          await _removeRepositorySkillLockEntry(
+            repositoryPath: event.repositoryPath,
+            skill: skill,
+          );
         }
       }
 
@@ -615,4 +608,107 @@ class RepositoriesBloc extends Bloc<RepositoriesEvent, RepositoriesState> {
       );
     }
   }
+}
+
+String _skillNameWithoutVersion(Skill skill) {
+  final separator = skill.id.lastIndexOf('@');
+  return separator > 0 ? skill.id.substring(0, separator) : skill.id;
+}
+
+String _skillShortName(Skill skill) {
+  final skillName = _skillNameWithoutVersion(skill);
+  final nameSeparator = skillName.lastIndexOf('/');
+  return nameSeparator >= 0
+      ? skillName.substring(nameSeparator + 1)
+      : skillName;
+}
+
+Future<void> _writeRepositorySkillLockEntry({
+  required String repositoryPath,
+  required Skill skill,
+  required String targetPath,
+}) async {
+  final lockFile = File(p.join(repositoryPath, '.agents', 'skills-lock.json'));
+  final lockJson = await _readRepositorySkillsLock(lockFile);
+  final skills = Map<String, dynamic>.from(lockJson['skills'] as Map);
+  final shortName = _skillShortName(skill);
+
+  skills[shortName] = {
+    'source':
+        _metadataString(skill, 'source') ?? '${skill.owner}/${skill.repo}',
+    'sourceType': _metadataString(skill, 'sourceType') ?? 'github',
+    'skillPath':
+        _metadataString(skill, 'skillPath') ?? 'skills/$shortName/SKILL.md',
+    'computedHash': await _computedSkillHash(skill, targetPath),
+  };
+
+  lockJson['skills'] = skills;
+  await lockFile.parent.create(recursive: true);
+  await lockFile.writeAsString(
+    const JsonEncoder.withIndent('  ').convert(lockJson),
+  );
+}
+
+Future<void> _removeRepositorySkillLockEntry({
+  required String repositoryPath,
+  required Skill skill,
+}) async {
+  final lockFile = File(p.join(repositoryPath, '.agents', 'skills-lock.json'));
+  if (!await lockFile.exists()) {
+    return;
+  }
+
+  final lockJson = await _readRepositorySkillsLock(lockFile);
+  final skills = Map<String, dynamic>.from(lockJson['skills'] as Map);
+  skills.remove(_skillShortName(skill));
+  lockJson['skills'] = skills;
+
+  if (skills.isEmpty) {
+    await lockFile.delete();
+    return;
+  }
+
+  await lockFile.writeAsString(
+    const JsonEncoder.withIndent('  ').convert(lockJson),
+  );
+}
+
+Future<Map<String, dynamic>> _readRepositorySkillsLock(File lockFile) async {
+  if (!await lockFile.exists()) {
+    return {'version': 1, 'skills': <String, dynamic>{}};
+  }
+
+  final decoded = json.decode(await lockFile.readAsString());
+  if (decoded is Map) {
+    return {
+      'version': decoded['version'] is int ? decoded['version'] : 1,
+      'skills': decoded['skills'] is Map
+          ? Map<String, dynamic>.from(decoded['skills'] as Map)
+          : <String, dynamic>{},
+    };
+  }
+  return {'version': 1, 'skills': <String, dynamic>{}};
+}
+
+String? _metadataString(Skill skill, String key) {
+  final value = skill.metadata[key];
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
+  }
+  return null;
+}
+
+Future<String> _computedSkillHash(Skill skill, String targetPath) async {
+  final metadataHash =
+      _metadataString(skill, 'computedHash') ?? _metadataString(skill, 'sha');
+  if (metadataHash != null) {
+    return metadataHash;
+  }
+
+  final skillFile = File(p.join(targetPath, 'SKILL.md'));
+  if (!await skillFile.exists()) {
+    return '';
+  }
+
+  return sha256.convert(await skillFile.readAsBytes()).toString();
 }
