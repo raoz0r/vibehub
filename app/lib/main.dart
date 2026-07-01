@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:vibehub/api/paths.dart';
 import 'package:vibehub/api/skills_catalog_api.dart';
 import 'package:vibehub/api/skills_sync.dart';
 import 'package:vibehub/ui/bloc/shell/shell_bloc.dart';
@@ -10,6 +11,7 @@ export 'package:vibehub/ui/shell/vibehub_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await VibeHubPaths.ensureInitialized();
   final skillsCatalogApi = SkillsCatalogApi();
   await SkillsSyncApi.sync();
   await skillsCatalogApi.hydrateFromFile(SkillsSyncApi.getLocalFilePath());

@@ -23,7 +23,8 @@ class VibeHubPaths {
   static String get dataDir {
     final env = Platform.environment;
     if (Platform.isWindows) {
-      final localAppData = env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
+      final localAppData =
+          env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
       return p.join(localAppData, _appName, 'Data');
     }
     if (Platform.isMacOS) {
@@ -67,7 +68,8 @@ class VibeHubPaths {
   static String get cacheDir {
     final env = Platform.environment;
     if (Platform.isWindows) {
-      final localAppData = env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
+      final localAppData =
+          env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
       return p.join(localAppData, _appName, 'Cache');
     }
     if (Platform.isMacOS) {
@@ -89,7 +91,8 @@ class VibeHubPaths {
   static String get logDir {
     final env = Platform.environment;
     if (Platform.isWindows) {
-      final localAppData = env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
+      final localAppData =
+          env['LOCALAPPDATA'] ?? p.join(homeDir, 'AppData', 'Local');
       return p.join(localAppData, _appName, 'Log');
     }
     if (Platform.isMacOS) {
@@ -110,10 +113,18 @@ class VibeHubPaths {
   /// Linux: /tmp/vibehub
   static String get tempDir {
     if (Platform.isWindows) {
-      final temp = Platform.environment['TEMP'] ?? p.join(homeDir, 'AppData', 'Local', 'Temp');
+      final temp =
+          Platform.environment['TEMP'] ??
+          p.join(homeDir, 'AppData', 'Local', 'Temp');
       return p.join(temp, _appName);
     }
     // For macOS/Linux, use Directory.systemTemp
     return p.join(Directory.systemTemp.path, _appName);
+  }
+
+  static Future<void> ensureInitialized() async {
+    for (final path in [dataDir, configDir, cacheDir, logDir, tempDir]) {
+      await Directory(path).create(recursive: true);
+    }
   }
 }
