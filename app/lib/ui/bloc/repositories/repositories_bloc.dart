@@ -628,7 +628,7 @@ Future<void> _writeRepositorySkillLockEntry({
   required Skill skill,
   required String targetPath,
 }) async {
-  final lockFile = File(p.join(repositoryPath, '.agents', 'skills-lock.json'));
+  final lockFile = File(p.join(repositoryPath, 'skills-lock.json'));
   final lockJson = await _readRepositorySkillsLock(lockFile);
   final skills = Map<String, dynamic>.from(lockJson['skills'] as Map);
   final shortName = _skillShortName(skill);
@@ -653,7 +653,7 @@ Future<void> _removeRepositorySkillLockEntry({
   required String repositoryPath,
   required Skill skill,
 }) async {
-  final lockFile = File(p.join(repositoryPath, '.agents', 'skills-lock.json'));
+  final lockFile = File(p.join(repositoryPath, 'skills-lock.json'));
   if (!await lockFile.exists()) {
     return;
   }

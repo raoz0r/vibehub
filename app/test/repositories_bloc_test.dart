@@ -170,9 +170,7 @@ void main() {
         final link = Link(linkPath);
         expect(await link.exists(), isTrue);
 
-        final skillsLockFile = File(
-          p.join(testRepoPath, '.agents', 'skills-lock.json'),
-        );
+        final skillsLockFile = File(p.join(testRepoPath, 'skills-lock.json'));
         expect(await skillsLockFile.exists(), isTrue);
         final skillsLockJson =
             json.decode(await skillsLockFile.readAsString())
@@ -252,7 +250,7 @@ void main() {
         final skillsLockJson =
             json.decode(
                   await File(
-                    p.join(testRepoPath, '.agents', 'skills-lock.json'),
+                    p.join(testRepoPath, 'skills-lock.json'),
                   ).readAsString(),
                 )
                 as Map<String, dynamic>;
@@ -299,9 +297,7 @@ void main() {
         await Link(
           linkPath,
         ).create(testRepoPath); // Target doesn't matter for deletion test
-        await File(
-          p.join(testRepoPath, '.agents', 'skills-lock.json'),
-        ).writeAsString(
+        await File(p.join(testRepoPath, 'skills-lock.json')).writeAsString(
           json.encode({
             'version': 1,
             'skills': {
@@ -346,9 +342,7 @@ void main() {
         // Verify the symlink and parent directories are deleted
         expect(await Link(linkPath).exists(), isFalse);
         expect(
-          await File(
-            p.join(testRepoPath, '.agents', 'skills-lock.json'),
-          ).exists(),
+          await File(p.join(testRepoPath, 'skills-lock.json')).exists(),
           isFalse,
         );
         expect(
@@ -414,9 +408,7 @@ void main() {
         await Directory(p.dirname(link1Path)).create(recursive: true);
         await Link(link1Path).create(testRepoPath);
         await Link(link2Path).create(testRepoPath);
-        await File(
-          p.join(testRepoPath, '.agents', 'skills-lock.json'),
-        ).writeAsString(
+        await File(p.join(testRepoPath, 'skills-lock.json')).writeAsString(
           json.encode({
             'version': 1,
             'skills': {
@@ -467,9 +459,7 @@ void main() {
         expect(await Link(link1Path).exists(), isFalse);
         expect(await Link(link2Path).exists(), isFalse);
         expect(
-          await File(
-            p.join(testRepoPath, '.agents', 'skills-lock.json'),
-          ).exists(),
+          await File(p.join(testRepoPath, 'skills-lock.json')).exists(),
           isFalse,
         );
         expect(
