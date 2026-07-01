@@ -1,0 +1,63 @@
+name: Compile, Package and Release
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows Release
+        run: flutter build windows --release --build-name 1.0.${{ github.run_number }} --build-number ${{ github.run_number }}
+
+      - name: Package Windows Build
+        shell: pwsh
+        run: |
+          $package = "VibeHub-windows-x64-v1.0.${{ github.run_number }}.zip"
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath $package -Force
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VibeHub-windows-x64
+          path: app/VibeHub-windows-x64-v1.0.${{ github.run_number }}.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
+          files: app/VibeHub-windows-x64-v1.0.${{ github.run_number }}.zip
+          target_commitish: dev
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
